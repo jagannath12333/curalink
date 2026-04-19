@@ -14,7 +14,7 @@ app.get("/", (req, res) => {
   res.send("Server running");
 });
 
-// ---------- CHECK HF KEY ----------
+// ---------- CHECK KEY ----------
 app.get("/check-key", (req, res) => {
   if (process.env.HF_API_KEY) {
     res.send("HF KEY LOADED");
@@ -96,18 +96,22 @@ app.get("/search/all", async (req, res) => {
       });
     }
 
-    // ---------- LIMIT FINAL PAPERS ----------
+    // ---------- LIMIT ----------
     const topPapers = papers.slice(0, 6);
 
-    // ---------- HUGGINGFACE AI ----------
-    let aiAnswer = "Summary not available.";
+    // ---------- HUGGINGFACE ----------
     const HF_API_KEY = process.env.HF_API_KEY;
+    let aiAnswer = "Summary not available.";
 
     if (!HF_API_KEY) {
       console.log("❌ HF KEY MISSING");
       aiAnswer = "AI not configured. Showing research results.";
     } else {
       try {
+        const HF_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2";
+
+        console.log("Calling HF API:", HF_URL); // debug
+
         const prompt = `
 You are a medical research assistant.
 
@@ -123,22 +127,21 @@ Provide:
 4. Summary
 `;
 
-        const response = await axios.post(
-          "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
-          {
-            inputs: prompt,
-            options: { wait_for_model: true } // ✅ important fix
+        const response = await axios({
+          method: "post",
+          url: HF_URL,
+          headers: {
+            Authorization: `Bearer ${HF_API_KEY}`,
+            "Content-Type": "application/json"
           },
-          {
-            headers: {
-              Authorization: `Bearer ${HF_API_KEY}`,
-              "Content-Type": "application/json"
-            },
-            timeout: 30000
-          }
-        );
+          data: {
+            inputs: prompt,
+            options: { wait_for_model: true }
+          },
+          timeout: 30000
+        });
 
-        // ✅ HANDLE MULTIPLE RESPONSE FORMATS
+        // ---------- RESPONSE HANDLING ----------
         if (Array.isArray(response.data)) {
           aiAnswer = response.data[0]?.generated_text || "No AI output";
         } else if (response.data?.generated_text) {
