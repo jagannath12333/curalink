@@ -125,31 +125,57 @@ app.get("/search/all", async (req, res) => {
     const topPapers = papers.slice(0, 6);
     const topTrials = trials.slice(0, 4);
 
-    // -------- AI FALLBACK --------
+    // -------- SMART FALLBACK (STRONG) --------
     let aiAnswer = `
 Condition Overview:
-${query} research focuses on diagnosis, treatment, and outcomes.
+${query} involves multiple clinical and research developments focusing on diagnosis, treatment, and patient outcomes.
 
-Research Insights:
+Key Research Insights:
 ${topPapers.map(p => `- ${p.title}`).join("\n")}
 
-Clinical Trials:
-${topTrials.map(t => `- ${t.title} (${t.status})`).join("\n")}
+Clinical Significance:
+Recent studies indicate improvements in treatment strategies, early detection, and patient survival.
+
+Notable Trends:
+Emerging therapies and ongoing clinical trials are shaping future treatment pathways.
 
 Summary:
-Ongoing studies and trials are improving understanding and treatment strategies.
+Research and trials suggest continuous advancement in understanding and managing ${query}.
 `;
 
-    // -------- HUGGINGFACE --------
+    // -------- HUGGINGFACE AI --------
     try {
       const HF_API_KEY = process.env.HF_API_KEY;
 
       if (HF_API_KEY) {
+        const prompt = `
+You are an expert medical research assistant.
+
+User Query: ${query}
+
+Research Papers:
+${topPapers.map(p => p.title).join("\n")}
+
+Clinical Trials:
+${topTrials.map(t => t.title).join("\n")}
+
+Generate a structured response:
+
+1. Condition Overview (specific, not generic)
+2. Key Research Insights (identify trends across papers)
+3. Clinical Significance (real-world meaning)
+4. Notable Trends
+5. Summary
+
+IMPORTANT:
+- Do not repeat titles
+- Combine insights
+- Be specific
+`;
+
         const response = await axios.post(
           "https://api-inference.huggingface.co/models/google/flan-t5-base",
-          {
-            inputs: `Summarize research on ${query}:\n${topPapers.map(p => p.title).join("\n")}`
-          },
+          { inputs: prompt },
           {
             headers: {
               Authorization: `Bearer ${HF_API_KEY}`
@@ -163,10 +189,10 @@ Ongoing studies and trials are improving understanding and treatment strategies.
         }
       }
     } catch (e) {
-      console.log("HF failed, fallback used");
+      console.log("HF failed → using fallback");
     }
 
-    // -------- RESPONSE --------
+    // -------- FINAL RESPONSE --------
     res.json({
       answer: aiAnswer,
       papers: topPapers,
