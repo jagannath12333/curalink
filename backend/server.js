@@ -9,13 +9,25 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
+// ---------- ROOT ----------
 app.get("/", (req, res) => {
   res.send("Server running");
 });
 
+// ---------- DEBUG KEY ----------
+app.get("/check-key", (req, res) => {
+  if (process.env.OPENAI_API_KEY) {
+    res.send("OPENAI KEY LOADED");
+  } else {
+    res.send("NO OPENAI KEY FOUND");
+  }
+});
+
+// ---------- MAIN API ----------
 app.get("/search/all", async (req, res) => {
   try {
     const query = req.query.q;
+
     if (!query) {
       return res.json({ answer: "No query provided", papers: [] });
     }
@@ -34,8 +46,9 @@ app.get("/search/all", async (req, res) => {
         source: "OpenAlex",
         url: item.id
       })).slice(0, 3);
+
     } catch (e) {
-      console.log("OpenAlex error");
+      console.log("OpenAlex ERROR:", e.message);
     }
 
     // ---------- PUBMED ----------
@@ -69,8 +82,9 @@ app.get("/search/all", async (req, res) => {
 
         papers = [...papers, ...pubmed];
       }
+
     } catch (e) {
-      console.log("PubMed error");
+      console.log("PubMed ERROR:", e.message);
     }
 
     if (papers.length === 0) {
@@ -80,46 +94,59 @@ app.get("/search/all", async (req, res) => {
       });
     }
 
-    // ---------- REAL AI (OPENAI) ----------
-    const OPENAI_KEY = process.env.OPENAI_API_KEY;
-
+    // ---------- OPENAI ----------
     let aiAnswer = "Summary not available.";
 
-    try {
-      const response = await axios.post(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          model: "gpt-3.5-turbo",
-          messages: [
-            {
-              role: "user",
-              content: `Explain briefly about ${query} using these papers:\n${papers.map(p => p.title).join("\n")}`
-            }
-          ],
-          max_tokens: 200
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${OPENAI_KEY}`,
-            "Content-Type": "application/json"
-          }
-        }
-      );
+    const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
-      aiAnswer = response.data.choices[0].message.content;
-    } catch (e) {
-      console.log("OpenAI failed, using fallback");
-      aiAnswer = `Research papers related to "${query}" show recent developments in treatment and diagnosis.`;
+    if (!OPENAI_KEY) {
+      console.log("❌ OPENAI KEY MISSING");
+      aiAnswer = "AI not configured. Showing research results.";
+    } else {
+      try {
+        const response = await axios.post(
+          "https://api.openai.com/v1/chat/completions",
+          {
+            model: "gpt-4o-mini", // ✅ better + cheaper
+            messages: [
+              {
+                role: "user",
+                content: `Explain briefly about ${query} using these papers:\n${papers.map(p => p.title).join("\n")}\n\nGive:\n1. Overview\n2. Key Points\n3. Summary`
+              }
+            ],
+            max_tokens: 200
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${OPENAI_KEY}`,
+              "Content-Type": "application/json"
+            },
+            timeout: 15000
+          }
+        );
+
+        aiAnswer = response.data.choices[0].message.content;
+
+      } catch (e) {
+        console.log("❌ OpenAI ERROR FULL:", {
+          message: e.message,
+          status: e.response?.status,
+          data: e.response?.data
+        });
+
+        aiAnswer = `Fallback: Research papers available but AI response failed.`;
+      }
     }
 
     res.json({ answer: aiAnswer, papers });
 
   } catch (error) {
-    console.error(error);
+    console.error("❌ SERVER ERROR:", error);
     res.status(500).json({ error: "Backend failed" });
   }
 });
 
+// ---------- SERVER ----------
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
