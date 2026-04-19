@@ -1,137 +1,853 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Curalink AI</title>
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Curalink AI — Healthcare Research Intelligence</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #0d47a1;
+      --secondary: #00897b;
+      --accent: #ff6b35;
+      --light: #f8f9fa;
+      --surface: #ffffff;
+      --text-primary: #1a1a1a;
+      --text-secondary: #666666;
+      --border: #e0e0e0;
+      --success: #26a69a;
+      --warning: #f57c00;
+    }
+
     body {
-      font-family: Arial;
-      background: #f4f6fb;
+      font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: linear-gradient(135deg, #f8f9fa 0%, #eef4f8 100%);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar Styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--secondary);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--primary);
     }
 
     .container {
-      max-width: 900px;
-      margin: auto;
-      padding: 30px;
-    }
-
-    input {
-      width: 70%;
-      padding: 12px;
-      border-radius: 8px;
-      border: 1px solid #ccc;
-    }
-
-    button {
-      padding: 12px 18px;
-      border: none;
-      background: teal;
-      color: white;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-
-    .card {
-      background: white;
-      padding: 20px;
-      margin-top: 20px;
-      border-radius: 10px;
-      animation: fadeIn 0.5s ease-in-out;
-    }
-
-    .tabs button {
-      margin-right: 10px;
-      margin-top: 15px;
-      background: #ddd;
-      color: black;
-    }
-
-    .tabs button.active {
-      background: teal;
-      color: white;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 60px 24px;
+      animation: fadeIn 0.6s ease-out;
     }
 
     @keyframes fadeIn {
-      from {opacity: 0;}
-      to {opacity: 1;}
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
+
+    /* Header */
+    .header {
+      margin-bottom: 50px;
+      text-align: center;
+      animation: slideDown 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .logo {
+      font-family: 'Playfair Display', serif;
+      font-size: 48px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+      letter-spacing: -1px;
+    }
+
+    .tagline {
+      font-size: 16px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    /* Search Section */
+    .search-section {
+      margin-bottom: 50px;
+    }
+
+    .search-box {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      animation: slideUp 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s both;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 16px 20px;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px;
+      color: var(--text-primary);
+      background: var(--surface);
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--secondary);
+      box-shadow: 0 0 0 3px rgba(0, 137, 123, 0.1);
+      transform: translateY(-2px);
+    }
+
+    input[type="text"]::placeholder {
+      color: #999;
+    }
+
+    button {
+      padding: 16px 32px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      position: relative;
+      overflow: hidden;
+      letter-spacing: 0.3px;
+    }
+
+    button::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.2);
+      transition: left 0.3s ease;
+    }
+
+    button:hover::before {
+      left: 100%;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(13, 71, 161, 0.3);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .search-tips {
+      font-size: 13px;
+      color: var(--text-secondary);
+      text-align: center;
+      margin-top: 12px;
+      animation: slideUp 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s both;
+    }
+
+    .search-tips em {
+      color: var(--secondary);
+      font-style: normal;
+      font-weight: 600;
+    }
+
+    /* Filter Bar */
+    .filter-bar {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 32px;
+      animation: slideUp 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.2s both;
+    }
+
+    .filter-bar.hidden {
+      display: none;
+    }
+
+    .filter-btn {
+      padding: 10px 20px;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      color: var(--text-primary);
+      border-radius: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    .filter-btn:hover {
+      border-color: var(--secondary);
+      color: var(--secondary);
+      transform: translateY(-1px);
+    }
+
+    .filter-btn.active {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      border-color: transparent;
+      color: white;
+      box-shadow: 0 4px 12px rgba(13, 71, 161, 0.2);
+    }
+
+    /* Loading State */
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .loading.active {
+      display: block;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(0, 137, 123, 0.2);
+      border-top-color: var(--secondary);
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* Cards - Enhanced */
+    .card {
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 36px;
+      margin-bottom: 24px;
+      border: 1px solid var(--border);
+      animation: slideUp 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    .card:nth-child(1) { animation-delay: 0.3s; }
+    .card:nth-child(2) { animation-delay: 0.4s; }
+    .card:nth-child(3) { animation-delay: 0.5s; }
+
+    .card:hover {
+      border-color: var(--secondary);
+      box-shadow: 0 12px 32px rgba(0, 137, 123, 0.15);
+      transform: translateY(-4px);
+    }
+
+    .card h3 {
+      font-family: 'Playfair Display', serif;
+      font-size: 24px;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card h3::before {
+      content: '';
+      width: 4px;
+      height: 24px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      border-radius: 2px;
+    }
+
+    /* AI Response - Formatted */
+    #ai {
+      display: none;
+    }
+
+    #ai.visible {
+      display: block;
+    }
+
+    .ai-formatted {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .ai-section {
+      padding: 18px;
+      background: linear-gradient(135deg, rgba(13, 71, 161, 0.04) 0%, rgba(0, 137, 123, 0.04) 100%);
+      border-left: 3px solid var(--secondary);
+      border-radius: 8px;
+      animation: fadeIn 0.5s ease-out;
+    }
+
+    .ai-section h4 {
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    .ai-section p {
+      color: var(--text-primary);
+      line-height: 1.8;
+      font-size: 15px;
+      margin: 0;
+    }
+
+    .ai-section ul {
+      margin: 12px 0 0 20px;
+      padding: 0;
+      list-style: disc;
+    }
+
+    .ai-section li {
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      padding: 0;
+      background: none;
+      border: none;
+      animation: none;
+    }
+
+    /* Lists */
+    ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    li {
+      padding: 16px 18px;
+      background: linear-gradient(135deg, rgba(13, 71, 161, 0.02) 0%, rgba(0, 137, 123, 0.02) 100%);
+      border-left: 3px solid var(--secondary);
+      border-radius: 8px;
+      transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      animation: slideIn 0.5s ease-out;
+    }
+
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-16px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    li:hover {
+      background: linear-gradient(135deg, rgba(13, 71, 161, 0.06) 0%, rgba(0, 137, 123, 0.06) 100%);
+      border-left-color: var(--primary);
+      padding-left: 22px;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 137, 123, 0.1);
+    }
+
+    a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    a::after {
+      content: '↗';
+      margin-left: 4px;
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    a:hover {
+      color: var(--secondary);
+    }
+
+    a:hover::after {
+      opacity: 1;
+      transform: translate(2px, -2px);
+    }
+
+    .year {
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      margin-left: 8px;
+    }
+
+    .status {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-left: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .status.active {
+      background: rgba(38, 166, 154, 0.2);
+      color: var(--success);
+    }
+
+    .status.recruiting {
+      background: rgba(255, 107, 53, 0.2);
+      color: var(--accent);
+    }
+
+    .status.completed {
+      background: rgba(13, 71, 161, 0.2);
+      color: var(--primary);
+    }
+
+    .location {
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin-left: 8px;
+      font-weight: 500;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-secondary);
+      display: none;
+    }
+
+    .empty-state.visible {
+      display: block;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .container {
+        padding: 40px 16px;
+      }
+
+      .logo {
+        font-size: 36px;
+      }
+
+      .search-box {
+        flex-direction: column;
+      }
+
+      button {
+        width: 100%;
+      }
+
+      .card {
+        padding: 24px;
+      }
+
+      .card h3 {
+        font-size: 20px;
+      }
+
+      .filter-bar {
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .filter-btn {
+        padding: 8px 16px;
+        font-size: 13px;
+      }
+
+      li {
+        padding: 14px 16px;
+      }
+    }
+
+    /* Utility Classes */
+    .fade-enter {
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    .stagger-children > li:nth-child(1) { animation-delay: 0s; }
+    .stagger-children > li:nth-child(2) { animation-delay: 0.05s; }
+    .stagger-children > li:nth-child(3) { animation-delay: 0.1s; }
+    .stagger-children > li:nth-child(4) { animation-delay: 0.15s; }
+    .stagger-children > li:nth-child(5) { animation-delay: 0.2s; }
   </style>
 </head>
-
 <body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">Curalink</div>
+      <div class="tagline">Healthcare Research Intelligence</div>
+    </div>
 
-<div class="container">
-  <h1>Curalink AI</h1>
+    <!-- Search Section -->
+    <div class="search-section">
+      <div class="search-box">
+        <input 
+          id="query" 
+          type="text"
+          placeholder="Explore: lung cancer treatment, immunotherapy, clinical outcomes..."
+          onkeypress="event.key === 'Enter' && search()"
+        >
+        <button onclick="search()">Search</button>
+      </div>
+      <div class="search-tips">
+        Try searching for <em>specific conditions</em>, <em>treatment types</em>, or <em>research areas</em>
+      </div>
+    </div>
 
-  <input id="query" placeholder="lung cancer treatment">
-  <button onclick="search()">Search</button>
+    <!-- Filter Bar -->
+    <div id="filter-bar" class="filter-bar hidden">
+      <button class="filter-btn active" onclick="filterResults('all')">All</button>
+      <button class="filter-btn" onclick="filterResults('papers')">Research Papers</button>
+      <button class="filter-btn" onclick="filterResults('trials')">Clinical Trials</button>
+    </div>
 
-  <div class="tabs">
-    <button onclick="setTab('all')" id="allBtn" class="active">All</button>
-    <button onclick="setTab('papers')" id="papersBtn">Research Papers</button>
-    <button onclick="setTab('trials')" id="trialsBtn">Clinical Trials</button>
+    <!-- Loading State -->
+    <div id="loading" class="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">Searching healthcare databases...</div>
+    </div>
+
+    <!-- AI Response -->
+    <div id="ai" class="card fade-enter"></div>
+
+    <!-- Research Papers -->
+    <div id="papers-container" class="card hidden">
+      <h3>Research Papers</h3>
+      <ul id="papers" class="stagger-children"></ul>
+    </div>
+
+    <!-- Clinical Trials -->
+    <div id="trials-container" class="card hidden">
+      <h3>Clinical Trials</h3>
+      <ul id="trials" class="stagger-children"></ul>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="empty-state">
+      <div class="empty-state-icon">🔍</div>
+      <h3>No results found</h3>
+      <p>Try refining your search with more specific terms or conditions</p>
+    </div>
   </div>
 
-  <div id="loading" style="display:none;">Loading...</div>
+  <script>
+    let currentFilter = 'all';
+    let currentData = null;
 
-  <div id="answer" class="card"></div>
+    async function search() {
+      const query = document.getElementById("query").value.trim();
+      
+      if (!query) {
+        alert("Please enter a search query");
+        return;
+      }
 
-  <div id="papersSection" class="card"></div>
-  <div id="trialsSection" class="card"></div>
-</div>
+      const loading = document.getElementById("loading");
+      const aiCard = document.getElementById("ai");
+      const papersContainer = document.getElementById("papers-container");
+      const trialsContainer = document.getElementById("trials-container");
+      const filterBar = document.getElementById("filter-bar");
+      const emptyState = document.getElementById("empty-state");
 
-<script>
-let currentTab = "all";
+      // Reset
+      loading.classList.add("active");
+      aiCard.classList.remove("visible");
+      aiCard.innerHTML = "";
+      document.getElementById("papers").innerHTML = "";
+      document.getElementById("trials").innerHTML = "";
+      papersContainer.classList.add("hidden");
+      trialsContainer.classList.add("hidden");
+      filterBar.classList.add("hidden");
+      emptyState.classList.remove("visible");
+      currentFilter = 'all';
+      resetFilterButtons();
 
-function setTab(tab) {
-  currentTab = tab;
+      try {
+        const response = await fetch(
+          `https://curalink-backend-h2rw.onrender.com/search/all?q=${encodeURIComponent(query)}`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`API Error: ${response.status}`);
+        }
 
-  document.querySelectorAll(".tabs button").forEach(b => b.classList.remove("active"));
-  document.getElementById(tab + "Btn").classList.add("active");
+        const data = await response.json();
+        currentData = data;
+        loading.classList.remove("active");
 
-  render();
-}
+        // Render AI response with formatting
+        if (data.answer) {
+          aiCard.innerHTML = formatAIResponse(data.answer);
+          aiCard.classList.add("visible");
+        }
 
-let globalData = null;
+        // Render papers
+        if (data.papers && data.papers.length > 0) {
+          const paperList = document.getElementById("papers");
+          paperList.innerHTML = "";
+          data.papers.forEach((paper) => {
+            const li = document.createElement("li");
+            li.innerHTML = `
+              <a href="${paper.url}" target="_blank" rel="noopener noreferrer">
+                ${escapeHtml(paper.title)}
+              </a>
+              <span class="year">${paper.year || "Year unknown"}</span>
+            `;
+            paperList.appendChild(li);
+          });
+          papersContainer.classList.remove("hidden");
+        }
 
-async function search() {
-  const q = document.getElementById("query").value;
+        // Render trials
+        if (data.trials && data.trials.length > 0) {
+          const trialList = document.getElementById("trials");
+          trialList.innerHTML = "";
+          data.trials.forEach((trial) => {
+            const li = document.createElement("li");
+            const statusClass = trial.status?.toLowerCase() || "unknown";
+            li.innerHTML = `
+              <strong>${escapeHtml(trial.title)}</strong>
+              <span class="status ${statusClass}">${trial.status || "Unknown"}</span>
+              <span class="location">${trial.location || "Location unknown"}</span>
+            `;
+            trialList.appendChild(li);
+          });
+          trialsContainer.classList.remove("hidden");
+        }
 
-  document.getElementById("loading").style.display = "block";
+        // Show filter bar and empty state
+        const hasResults = (data.papers && data.papers.length > 0) || (data.trials && data.trials.length > 0);
+        if (hasResults) {
+          filterBar.classList.remove("hidden");
+        } else {
+          emptyState.classList.add("visible");
+        }
 
-  const res = await fetch(`https://curalink-backend-h2rw.onrender.com/search/all?q=${q}`);
-  const data = await res.json();
+      } catch (error) {
+        loading.classList.remove("active");
+        aiCard.innerHTML = `<strong>Error:</strong> ${error.message}. Please check the backend connection.`;
+        aiCard.classList.add("visible");
+        console.error("Search error:", error);
+      }
+    }
 
-  globalData = data;
+    function formatAIResponse(answer) {
+      // Parse answer into sections
+      const sections = parseAnswerIntoSections(answer);
+      
+      let html = '<div class="ai-formatted">';
+      sections.forEach(section => {
+        html += `
+          <div class="ai-section">
+            <h4>${escapeHtml(section.title)}</h4>
+        `;
+        
+        if (section.points && section.points.length > 0) {
+          html += '<ul>';
+          section.points.forEach(point => {
+            html += `<li>${escapeHtml(point)}</li>`;
+          });
+          html += '</ul>';
+        } else {
+          html += `<p>${escapeHtml(section.content)}</p>`;
+        }
+        
+        html += '</div>';
+      });
+      html += '</div>';
+      
+      return html;
+    }
 
-  document.getElementById("loading").style.display = "none";
+    function parseAnswerIntoSections(answer) {
+      const lines = answer.split('\n').filter(line => line.trim());
+      const sections = [];
+      let currentSection = null;
 
-  render();
-}
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        
+        // Check if line is a section header
+        if (isSectionHeader(trimmed)) {
+          if (currentSection) {
+            sections.push(currentSection);
+          }
+          currentSection = {
+            title: cleanHeader(trimmed),
+            content: '',
+            points: []
+          };
+        } else if (currentSection) {
+          // Check if line is a bullet point
+          if (trimmed.startsWith('•') || trimmed.startsWith('-') || trimmed.startsWith('*')) {
+            const point = trimmed.replace(/^[•\-*]\s*/, '');
+            currentSection.points.push(point);
+          } else if (trimmed) {
+            if (currentSection.content) {
+              currentSection.content += ' ';
+            }
+            currentSection.content += trimmed;
+          }
+        }
+      });
 
-function render() {
-  if (!globalData) return;
+      if (currentSection) {
+        sections.push(currentSection);
+      }
 
-  document.getElementById("answer").innerText = globalData.answer;
+      // If no sections detected, create a default one
+      if (sections.length === 0) {
+        sections.push({
+          title: 'Research Summary',
+          content: answer,
+          points: []
+        });
+      }
 
-  const papersDiv = document.getElementById("papersSection");
-  const trialsDiv = document.getElementById("trialsSection");
+      return sections;
+    }
 
-  papersDiv.innerHTML = "<h3>Research Papers</h3>";
-  trialsDiv.innerHTML = "<h3>Clinical Trials</h3>";
+    function isSectionHeader(text) {
+      const headerPatterns = [
+        /^(Condition\s+Overview|Overview)/i,
+        /^(Research\s+Insights|Insights)/i,
+        /^(Clinical\s+Relevance|Clinical\s+Trials)/i,
+        /^(Key\s+Findings)/i,
+        /^(Summary)/i,
+        /^(Treatment|Outcomes|Risk|Complications)/i
+      ];
+      
+      return headerPatterns.some(pattern => pattern.test(text)) && text.length < 80;
+    }
 
-  globalData.papers.forEach(p => {
-    papersDiv.innerHTML += `<p>• ${p.title} (${p.year})</p>`;
-  });
+    function cleanHeader(text) {
+      return text.replace(/[:\.]*$/, '').trim();
+    }
 
-  globalData.trials.forEach(t => {
-    trialsDiv.innerHTML += `<p>• ${t.title} (${t.status})</p>`;
-  });
+    function filterResults(type) {
+      currentFilter = type;
+      updateFilterButtons();
+      
+      const papersContainer = document.getElementById("papers-container");
+      const trialsContainer = document.getElementById("trials-container");
 
-  papersDiv.style.display = (currentTab === "papers" || currentTab === "all") ? "block" : "none";
-  trialsDiv.style.display = (currentTab === "trials" || currentTab === "all") ? "block" : "none";
-}
-</script>
+      if (type === 'all') {
+        papersContainer.classList.remove("hidden");
+        trialsContainer.classList.remove("hidden");
+      } else if (type === 'papers') {
+        papersContainer.classList.remove("hidden");
+        trialsContainer.classList.add("hidden");
+      } else if (type === 'trials') {
+        papersContainer.classList.add("hidden");
+        trialsContainer.classList.remove("hidden");
+      }
+    }
 
+    function updateFilterButtons() {
+      const buttons = document.querySelectorAll(".filter-btn");
+      buttons.forEach(btn => btn.classList.remove("active"));
+      
+      const filterMap = {
+        'all': 0,
+        'papers': 1,
+        'trials': 2
+      };
+      
+      if (filterMap[currentFilter] !== undefined) {
+        buttons[filterMap[currentFilter]].classList.add("active");
+      }
+    }
+
+    function resetFilterButtons() {
+      const buttons = document.querySelectorAll(".filter-btn");
+      buttons.forEach(btn => btn.classList.remove("active"));
+      buttons[0]?.classList.add("active");
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Focus input on page load
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("query").focus();
+    });
+  </script>
 </body>
 </html>
