@@ -116,7 +116,7 @@ User Query: ${query}
 Research Papers:
 ${topPapers.map(p => `- ${p.title}`).join("\n")}
 
-Provide structured output:
+Provide:
 1. Condition Overview
 2. Key Research Insights
 3. Clinical Relevance
@@ -126,23 +126,32 @@ Provide structured output:
         const response = await axios.post(
           "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
           {
-            inputs: prompt
+            inputs: prompt,
+            options: { wait_for_model: true } // ✅ important fix
           },
           {
             headers: {
               Authorization: `Bearer ${HF_API_KEY}`,
               "Content-Type": "application/json"
             },
-            timeout: 20000
+            timeout: 30000
           }
         );
 
-        aiAnswer =
-          response.data?.[0]?.generated_text ||
-          "AI response could not be generated.";
+        // ✅ HANDLE MULTIPLE RESPONSE FORMATS
+        if (Array.isArray(response.data)) {
+          aiAnswer = response.data[0]?.generated_text || "No AI output";
+        } else if (response.data?.generated_text) {
+          aiAnswer = response.data.generated_text;
+        } else if (response.data?.error) {
+          console.log("HF MODEL ERROR:", response.data.error);
+          aiAnswer = "AI model is loading, please try again.";
+        } else {
+          aiAnswer = "AI response format not recognized.";
+        }
 
       } catch (e) {
-        console.log("❌ HF ERROR:", e.response?.data || e.message);
+        console.log("❌ HF ERROR FULL:", e.response?.data || e.message);
         aiAnswer = "Fallback: AI failed but research data is available.";
       }
     }
