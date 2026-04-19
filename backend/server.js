@@ -14,15 +14,6 @@ app.get("/", (req, res) => {
   res.send("Server running");
 });
 
-// ---------- CHECK KEY ----------
-app.get("/check-key", (req, res) => {
-  if (process.env.HF_API_KEY) {
-    res.send("HF KEY LOADED");
-  } else {
-    res.send("NO HF KEY FOUND");
-  }
-});
-
 // ---------- MAIN API ----------
 app.get("/search/all", async (req, res) => {
   try {
@@ -97,63 +88,47 @@ app.get("/search/all", async (req, res) => {
     // ---------- LIMIT ----------
     const topPapers = papers.slice(0, 6);
 
-    // ---------- HUGGINGFACE ----------
-    const HF_API_KEY = process.env.HF_API_KEY;
+    // ---------- HUGGING FACE (FINAL WORKING MODEL) ----------
     let aiAnswer = "Summary not available.";
+    const HF_API_KEY = process.env.HF_API_KEY;
 
     if (!HF_API_KEY) {
-      console.log("❌ HF KEY MISSING");
       aiAnswer = "AI not configured. Showing research results.";
     } else {
       try {
         const HF_URL =
-          "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2";
-
-        console.log("Calling HF API:", HF_URL);
+          "https://api-inference.huggingface.co/models/google/flan-t5-large";
 
         const prompt = `
-You are a medical research assistant.
+Explain briefly about ${query} using these research papers:
 
-User Query: ${query}
-
-Research Papers:
 ${topPapers.map(p => `- ${p.title}`).join("\n")}
 
-Provide:
-1. Condition Overview
-2. Key Research Insights
-3. Clinical Relevance
-4. Summary
+Give:
+1. Overview
+2. Key Insights
+3. Summary
 `;
 
-        const hfRes = await fetch(HF_URL, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${HF_API_KEY}`,
-            "Content-Type": "application/json"
+        const response = await axios.post(
+          HF_URL,
+          {
+            inputs: prompt
           },
-          body: JSON.stringify({
-            inputs: prompt,
-            options: { wait_for_model: true }
-          })
-        });
+          {
+            headers: {
+              Authorization: `Bearer ${HF_API_KEY}`,
+              "Content-Type": "application/json"
+            },
+            timeout: 20000
+          }
+        );
 
-        const data = await hfRes.json();
-
-        console.log("HF RAW RESPONSE:", data);
-
-        // ---------- RESPONSE HANDLING ----------
-        if (Array.isArray(data)) {
-          aiAnswer = data[0]?.generated_text || "No AI output";
-        } else if (data.generated_text) {
-          aiAnswer = data.generated_text;
-        } else if (data.error) {
-          aiAnswer = "Model is loading. Please try again.";
-        } else {
-          aiAnswer = "Unexpected AI response.";
-        }
-      } catch (err) {
-        console.log("❌ HF FETCH ERROR:", err.message);
+        aiAnswer =
+          response.data?.[0]?.generated_text ||
+          "AI response could not be generated.";
+      } catch (e) {
+        console.log("HF ERROR:", e.response?.data || e.message);
         aiAnswer = "Fallback: AI failed but research data is available.";
       }
     }
@@ -163,7 +138,7 @@ Provide:
       papers: topPapers
     });
   } catch (error) {
-    console.error("❌ SERVER ERROR:", error);
+    console.error("SERVER ERROR:", error);
     res.status(500).json({ error: "Backend failed" });
   }
 });
