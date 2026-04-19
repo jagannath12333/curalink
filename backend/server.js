@@ -48,7 +48,6 @@ app.get("/search/all", async (req, res) => {
       }));
 
       papers = [...papers, ...openalexData];
-
     } catch (e) {
       console.log("OpenAlex ERROR:", e.message);
     }
@@ -84,7 +83,6 @@ app.get("/search/all", async (req, res) => {
 
         papers = [...papers, ...pubmed];
       }
-
     } catch (e) {
       console.log("PubMed ERROR:", e.message);
     }
@@ -108,9 +106,10 @@ app.get("/search/all", async (req, res) => {
       aiAnswer = "AI not configured. Showing research results.";
     } else {
       try {
-        const HF_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2";
+        const HF_URL =
+          "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2";
 
-        console.log("Calling HF API:", HF_URL); // debug
+        console.log("Calling HF API:", HF_URL);
 
         const prompt = `
 You are a medical research assistant.
@@ -127,34 +126,34 @@ Provide:
 4. Summary
 `;
 
-        const response = await axios({
-          method: "post",
-          url: HF_URL,
+        const hfRes = await fetch(HF_URL, {
+          method: "POST",
           headers: {
             Authorization: `Bearer ${HF_API_KEY}`,
             "Content-Type": "application/json"
           },
-          data: {
+          body: JSON.stringify({
             inputs: prompt,
             options: { wait_for_model: true }
-          },
-          timeout: 30000
+          })
         });
 
-        // ---------- RESPONSE HANDLING ----------
-        if (Array.isArray(response.data)) {
-          aiAnswer = response.data[0]?.generated_text || "No AI output";
-        } else if (response.data?.generated_text) {
-          aiAnswer = response.data.generated_text;
-        } else if (response.data?.error) {
-          console.log("HF MODEL ERROR:", response.data.error);
-          aiAnswer = "AI model is loading, please try again.";
-        } else {
-          aiAnswer = "AI response format not recognized.";
-        }
+        const data = await hfRes.json();
 
-      } catch (e) {
-        console.log("❌ HF ERROR FULL:", e.response?.data || e.message);
+        console.log("HF RAW RESPONSE:", data);
+
+        // ---------- RESPONSE HANDLING ----------
+        if (Array.isArray(data)) {
+          aiAnswer = data[0]?.generated_text || "No AI output";
+        } else if (data.generated_text) {
+          aiAnswer = data.generated_text;
+        } else if (data.error) {
+          aiAnswer = "Model is loading. Please try again.";
+        } else {
+          aiAnswer = "Unexpected AI response.";
+        }
+      } catch (err) {
+        console.log("❌ HF FETCH ERROR:", err.message);
         aiAnswer = "Fallback: AI failed but research data is available.";
       }
     }
@@ -163,7 +162,6 @@ Provide:
       answer: aiAnswer,
       papers: topPapers
     });
-
   } catch (error) {
     console.error("❌ SERVER ERROR:", error);
     res.status(500).json({ error: "Backend failed" });
