@@ -1,243 +1,174 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Curalink AI</title>
+const express = require("express");
+const axios = require("axios");
+const xml2js = require("xml2js");
+const cors = require("cors");
 
-  <style>
-    body {
-      font-family: Arial;
-      background: #f4f6fb;
-      margin: 0;
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+app.use(cors());
+app.use(express.json());
+
+// -------- MEMORY --------
+const userMemory = {};
+
+// -------- ROOT --------
+app.get("/", (req, res) => {
+  res.send("Curalink Backend Running");
+});
+
+// -------- MAIN API --------
+app.get("/search/all", async (req, res) => {
+  try {
+    const query = req.query.q;
+    const userId = req.query.user || "default";
+
+    if (!query) {
+      return res.json({ answer: "No query provided", papers: [], trials: [] });
     }
 
-    .container {
-      max-width: 900px;
-      margin: auto;
-      padding: 30px;
+    // -------- QUERY EXPANSION (VERY IMPORTANT) --------
+    const expandedQuery = `${query} disease treatment therapy clinical research`;
+
+    const prevContext = userMemory[userId] || "";
+    const finalQuery = prevContext
+      ? `${prevContext} AND ${expandedQuery}`
+      : expandedQuery;
+
+    userMemory[userId] = finalQuery;
+
+    let papers = [];
+    let trials = [];
+
+    // -------- OPENALEX --------
+    try {
+      const resOA = await axios.get(
+        `https://api.openalex.org/works?search=${finalQuery}&per-page=40&sort=publication_date:desc`
+      );
+
+      papers = resOA.data.results.map(p => ({
+        title: p.display_name || "",
+        year: p.publication_year || "N/A",
+        source: "OpenAlex",
+        url: p.id || ""
+      }));
+    } catch (e) {
+      console.log("OpenAlex error:", e.message);
     }
 
-    h1 {
-      text-align: center;
-      color: #1f3b57;
-    }
+    // -------- PUBMED --------
+    try {
+      const searchRes = await axios.get(
+        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${finalQuery}&retmax=15&retmode=json`
+      );
 
-    .search-box {
-      display: flex;
-      gap: 10px;
-      margin-top: 20px;
-    }
+      const ids = searchRes.data?.esearchresult?.idlist || [];
 
-    input {
-      flex: 1;
-      padding: 12px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-    }
+      if (ids.length > 0) {
+        const fetchRes = await axios.get(
+          `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${ids.join(",")}&retmode=xml`
+        );
 
-    button {
-      padding: 12px 20px;
-      background: #007b8f;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
+        const parser = new xml2js.Parser();
+        const parsed = await parser.parseStringPromise(fetchRes.data);
 
-    button:hover {
-      background: #005f6b;
-    }
+        const articles = parsed?.PubmedArticleSet?.PubmedArticle || [];
 
-    /* FILTER BUTTONS */
-    .filters {
-      margin-top: 20px;
-      display: flex;
-      gap: 10px;
-    }
+        const pubmed = articles.map(a => {
+          const art = a.MedlineCitation[0].Article[0];
 
-    .filter-btn {
-      padding: 8px 14px;
-      border-radius: 6px;
-      border: 1px solid #007b8f;
-      background: white;
-      color: #007b8f;
-      cursor: pointer;
-    }
+          return {
+            title: art?.ArticleTitle?.[0] || "",
+            year:
+              art?.Journal?.[0]?.JournalIssue?.[0]?.PubDate?.[0]?.Year?.[0] ||
+              "N/A",
+            source: "PubMed"
+          };
+        });
 
-    .filter-btn.active {
-      background: #007b8f;
-      color: white;
-    }
-
-    /* CARDS */
-    .card {
-      background: white;
-      padding: 20px;
-      margin-top: 20px;
-      border-radius: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-
-      /* animation */
-      opacity: 0;
-      transform: translateY(10px);
-      animation: fadeIn 0.4s ease forwards;
-    }
-
-    @keyframes fadeIn {
-      to {
-        opacity: 1;
-        transform: translateY(0);
+        papers = [...papers, ...pubmed];
       }
+    } catch (e) {
+      console.log("PubMed error:", e.message);
     }
 
-    .section-title {
-      font-weight: bold;
-      margin-top: 15px;
-      color: #2c3e50;
+    // -------- CLINICAL TRIALS --------
+    try {
+      const ctRes = await axios.get(
+        `https://clinicaltrials.gov/api/v2/studies?query.cond=${query}&pageSize=10&format=json`
+      );
+
+      trials = ctRes.data.studies.map(t => ({
+        title: t.protocolSection.identificationModule.briefTitle,
+        status: t.protocolSection.statusModule.overallStatus,
+        location:
+          t.protocolSection.contactsLocationsModule?.locations?.[0]?.facility
+            ?.city || "N/A"
+      }));
+    } catch (e) {
+      console.log("Trials error:", e.message);
     }
 
-    .paper, .trial {
-      padding: 10px;
-      border-bottom: 1px solid #eee;
-    }
+    // -------- SMART RANKING --------
+    papers = papers
+      .map(p => {
+        const title = (p.title || "").toLowerCase();
+        const q = query.toLowerCase();
 
-    .paper:last-child,
-    .trial:last-child {
-      border-bottom: none;
-    }
+        let score = 0;
 
-    .paper a {
-      color: #007b8f;
-      text-decoration: none;
-    }
+        if (title.includes(q)) score += 5;
 
-    .paper a:hover {
-      text-decoration: underline;
-    }
+        q.split(" ").forEach(word => {
+          if (title.includes(word)) score += 1;
+        });
 
-    .loading {
-      margin-top: 20px;
-      color: gray;
-    }
+        if (title.includes("treatment")) score += 2;
+        if (title.includes("therapy")) score += 2;
+        if (title.includes("cancer")) score += 2;
+        if (title.includes("clinical")) score += 1;
 
-    .hidden {
-      display: none;
-    }
+        const yearNum = parseInt(p.year);
+        if (!isNaN(yearNum)) score += yearNum / 1000;
 
-  </style>
-</head>
+        return { ...p, score };
+      })
+      .filter(p => p.score >= 4)
+      .sort((a, b) => b.score - a.score);
 
-<body>
+    const topPapers = papers.slice(0, 6);
+    const topTrials = trials.slice(0, 4);
 
-<div class="container">
+    // -------- FALLBACK AI (SAFE + STRONG) --------
+    const aiAnswer = `
+Condition Overview:
+${query} research focuses on diagnosis, treatment, and clinical outcomes.
 
-  <h1>Curalink AI</h1>
+Key Research Insights:
+${topPapers.map(p => `• ${p.title}`).join("\n")}
 
-  <div class="search-box">
-    <input id="query" placeholder="e.g. lung cancer treatment">
-    <button onclick="search()">Search</button>
-  </div>
+Clinical Significance:
+Recent studies show improved therapies, early detection, and survival strategies.
 
-  <!-- FILTERS -->
-  <div class="filters">
-    <div class="filter-btn active" onclick="setFilter('all', this)">All</div>
-    <div class="filter-btn" onclick="setFilter('papers', this)">Research Papers</div>
-    <div class="filter-btn" onclick="setFilter('trials', this)">Clinical Trials</div>
-  </div>
+Notable Trends:
+Emerging targeted therapies and clinical trials are shaping future treatment pathways.
 
-  <div id="loading" class="loading"></div>
+Summary:
+There is continuous advancement in ${query} through research and clinical trials.
+`;
 
-  <div id="answer" class="card"></div>
-  <div id="papers" class="card"></div>
-  <div id="trials" class="card"></div>
-
-</div>
-
-<script>
-let currentFilter = "all";
-
-function setFilter(filter, btn) {
-  currentFilter = filter;
-
-  document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
-  btn.classList.add("active");
-
-  applyFilter();
-}
-
-function applyFilter() {
-  document.getElementById("answer").classList.remove("hidden");
-  document.getElementById("papers").classList.remove("hidden");
-  document.getElementById("trials").classList.remove("hidden");
-
-  if (currentFilter === "papers") {
-    document.getElementById("trials").classList.add("hidden");
-  }
-
-  if (currentFilter === "trials") {
-    document.getElementById("papers").classList.add("hidden");
-  }
-}
-
-async function search() {
-  const q = document.getElementById("query").value;
-
-  document.getElementById("loading").innerText = "Loading...";
-  document.getElementById("answer").innerHTML = "";
-  document.getElementById("papers").innerHTML = "";
-  document.getElementById("trials").innerHTML = "";
-
-  const res = await fetch(`https://curalink-backend-h2rw.onrender.com/search/all?q=${q}`);
-  const data = await res.json();
-
-  document.getElementById("loading").innerText = "";
-
-  // ---------- AI ----------
-  const formattedAnswer = data.answer
-    .replace(/\n/g, "<br>")
-    .replace(/Condition Overview:/g, "<div class='section-title'>Condition Overview</div>")
-    .replace(/Key Research Insights:/g, "<div class='section-title'>Key Research Insights</div>")
-    .replace(/Clinical Significance:/g, "<div class='section-title'>Clinical Significance</div>")
-    .replace(/Notable Trends:/g, "<div class='section-title'>Notable Trends</div>")
-    .replace(/Summary:/g, "<div class='section-title'>Summary</div>");
-
-  document.getElementById("answer").innerHTML = formattedAnswer;
-
-  // ---------- PAPERS ----------
-  let papersHTML = "<h3>Research Papers</h3>";
-
-  data.papers.forEach(p => {
-    papersHTML += `
-      <div class="paper">
-        <a href="${p.url}" target="_blank">${p.title}</a>
-        <div>${p.year} • ${p.source}</div>
-      </div>
-    `;
-  });
-
-  document.getElementById("papers").innerHTML = papersHTML;
-
-  // ---------- TRIALS ----------
-  let trialsHTML = "<h3>Clinical Trials</h3>";
-
-  if (data.trials.length === 0) {
-    trialsHTML += "<p>No trials found</p>";
-  } else {
-    data.trials.forEach(t => {
-      trialsHTML += `
-        <div class="trial">
-          <strong>${t.title}</strong><br>
-          Status: ${t.status}<br>
-          Location: ${t.location}
-        </div>
-      `;
+    res.json({
+      answer: aiAnswer,
+      papers: topPapers,
+      trials: topTrials
     });
+
+  } catch (err) {
+    console.error("SERVER ERROR:", err);
+    res.status(500).json({ error: "Server failed" });
   }
+});
 
-  document.getElementById("trials").innerHTML = trialsHTML;
-
-  applyFilter();
-}
-</script>
-
-</body>
-</html>
+app.listen(PORT, () => {
+  console.log(`Server running on ${PORT}`);
+});
