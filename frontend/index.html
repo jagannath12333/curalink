@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Medical Research AI</title>
+  <title>Curalink AI</title>
   <style>
     body {
+      margin: 0;
       font-family: Arial;
       background: #f4f6fb;
     }
@@ -14,13 +15,30 @@
       padding: 30px;
     }
 
+    h1 {
+      text-align: center;
+    }
+
+    .search-box {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
     input {
-      width: 70%;
-      padding: 10px;
+      flex: 1;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
     }
 
     button {
-      padding: 10px;
+      padding: 12px 20px;
+      background: #2575fc;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
     }
 
     .card {
@@ -28,6 +46,25 @@
       padding: 20px;
       margin-top: 20px;
       border-radius: 10px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+    }
+
+    .section-title {
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+
+    .loading {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    li {
+      margin-bottom: 10px;
+    }
+
+    a {
+      color: #2575fc;
     }
   </style>
 </head>
@@ -35,38 +72,91 @@
 <body>
 
 <div class="container">
-  <h1>Medical Research AI</h1>
 
-  <input id="query" placeholder="lung cancer treatment">
-  <button onclick="search()">Search</button>
+  <h1>Curalink AI</h1>
 
-  <div id="loading" style="display:none;">Loading...</div>
+  <div class="search-box">
+    <input id="query" placeholder="e.g. lung cancer treatment">
+    <button onclick="search()">Search</button>
+  </div>
 
-  <div id="answer" class="card"></div>
-  <ul id="papers"></ul>
+  <div id="loading" class="loading" style="display:none;">
+    Fetching research data...
+  </div>
+
+  <div id="answer" class="card" style="display:none;"></div>
+
+  <div id="papersCard" class="card" style="display:none;">
+    <div class="section-title">Research Papers</div>
+    <ul id="papers"></ul>
+  </div>
+
+  <div id="trialsCard" class="card" style="display:none;">
+    <div class="section-title">Clinical Trials</div>
+    <ul id="trials"></ul>
+  </div>
+
 </div>
 
 <script>
 async function search() {
-  const q = document.getElementById("query").value;
+  const q = document.getElementById("query").value.trim();
 
-  document.getElementById("loading").style.display = "block";
+  if (!q) {
+    alert("Enter a query");
+    return;
+  }
 
-  const res = await fetch(`https://curalink-backend-h2rw.onrender.com/search/all?q=${q}`);
-  const data = await res.json();
+  const loading = document.getElementById("loading");
+  const answer = document.getElementById("answer");
+  const papers = document.getElementById("papers");
+  const trials = document.getElementById("trials");
 
-  document.getElementById("loading").style.display = "none";
+  loading.style.display = "block";
+  answer.style.display = "none";
+  papers.innerHTML = "";
+  trials.innerHTML = "";
 
-  document.getElementById("answer").innerText = data.answer;
+  try {
+    const res = await fetch(`https://curalink-backend-h2rw.onrender.com/search/all?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
 
-  const list = document.getElementById("papers");
-  list.innerHTML = "";
+    loading.style.display = "none";
 
-  data.papers.forEach(p => {
-    const li = document.createElement("li");
-    li.innerText = `${p.title} (${p.year})`;
-    list.appendChild(li);
-  });
+    // Answer
+    answer.innerHTML = data.answer.replace(/\n/g, "<br>");
+    answer.style.display = "block";
+
+    // Papers
+    data.papers.forEach(p => {
+      const li = document.createElement("li");
+      li.innerHTML = `
+        <b>${p.title}</b> (${p.year}) - ${p.source}
+        ${p.url ? `<br><a href="${p.url}" target="_blank">View</a>` : ""}
+      `;
+      papers.appendChild(li);
+    });
+
+    document.getElementById("papersCard").style.display = "block";
+
+    // Trials
+    if (data.trials) {
+      data.trials.forEach(t => {
+        const li = document.createElement("li");
+        li.innerHTML = `
+          <b>${t.title}</b><br>
+          Status: ${t.status}<br>
+          Location: ${t.location}
+        `;
+        trials.appendChild(li);
+      });
+
+      document.getElementById("trialsCard").style.display = "block";
+    }
+
+  } catch {
+    loading.innerText = "Error fetching data";
+  }
 }
 </script>
 
