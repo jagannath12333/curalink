@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html>
 <head>
   <title>Medical Research AI</title>
@@ -9,109 +10,112 @@
       background: linear-gradient(to right, #eef2f7, #f8fbff);
     }
 
-    .container {
-      max-width: 900px;
-      margin: auto;
-      padding: 40px 20px;
-    }
+```
+.container {
+  max-width: 900px;
+  margin: auto;
+  padding: 40px 20px;
+}
 
-    h1 {
-      text-align: center;
-      font-size: 42px;
-      margin-bottom: 10px;
-    }
+h1 {
+  text-align: center;
+  font-size: 42px;
+  margin-bottom: 10px;
+}
 
-    .gradient {
-      background: linear-gradient(90deg, #6a11cb, #2575fc);
-      background-clip: text;
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
+.gradient {
+  background: linear-gradient(90deg, #6a11cb, #2575fc);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
 
-    .subtitle {
-      text-align: center;
-      color: #666;
-      margin-bottom: 30px;
-    }
+.subtitle {
+  text-align: center;
+  color: #666;
+  margin-bottom: 30px;
+}
 
-    .search-box {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 20px;
-    }
+.search-box {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
 
-    input {
-      flex: 1;
-      padding: 14px;
-      border-radius: 10px;
-      border: 1px solid #ccc;
-      font-size: 16px;
-      outline: none;
-    }
+input {
+  flex: 1;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  outline: none;
+}
 
-    input:focus {
-      border-color: #2575fc;
-      box-shadow: 0 0 5px rgba(37,117,252,0.3);
-    }
+input:focus {
+  border-color: #2575fc;
+  box-shadow: 0 0 5px rgba(37,117,252,0.3);
+}
 
-    button {
-      padding: 14px 25px;
-      border: none;
-      border-radius: 10px;
-      background: linear-gradient(90deg, #6a11cb, #2575fc);
-      color: white;
-      font-size: 16px;
-      cursor: pointer;
-      transition: 0.2s;
-    }
+button {
+  padding: 14px 25px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #6a11cb, #2575fc);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  transition: 0.2s;
+}
 
-    button:hover {
-      opacity: 0.9;
-    }
+button:hover {
+  opacity: 0.9;
+}
 
-    button:disabled {
-      background: gray;
-      cursor: not-allowed;
-    }
+button:disabled {
+  background: gray;
+  cursor: not-allowed;
+}
 
-    .card {
-      background: white;
-      padding: 20px;
-      margin-top: 20px;
-      border-radius: 12px;
-      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-    }
+.card {
+  background: white;
+  padding: 20px;
+  margin-top: 20px;
+  border-radius: 12px;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+}
 
-    .loading {
-      text-align: center;
-      font-size: 18px;
-      color: #555;
-      margin-top: 20px;
-    }
+.loading {
+  text-align: center;
+  font-size: 18px;
+  color: #555;
+  margin-top: 20px;
+}
 
-    ul {
-      padding-left: 20px;
-    }
+ul {
+  padding-left: 20px;
+}
 
-    li {
-      margin-bottom: 10px;
-    }
+li {
+  margin-bottom: 10px;
+}
 
-    a {
-      color: #2575fc;
-      text-decoration: none;
-    }
+a {
+  color: #2575fc;
+  text-decoration: none;
+}
 
-    a:hover {
-      text-decoration: underline;
-    }
+a:hover {
+  text-decoration: underline;
+}
 
-    .footer {
-      text-align: center;
-      margin-top: 40px;
-      color: #999;
-      font-size: 14px;
-    }
+.footer {
+  text-align: center;
+  margin-top: 40px;
+  color: #999;
+  font-size: 14px;
+}
+```
+
   </style>
 </head>
 
@@ -128,16 +132,16 @@
   </div>
 
   <div id="loading" class="loading" style="display:none;">
-    ⏳ AI is analyzing research... (3–8 sec)
+    AI is analyzing research... (3–8 sec)
   </div>
 
   <div id="answerCard" class="card" style="display:none;">
-    <h2>🧠 AI Insights</h2>
+    <h2>AI Insights</h2>
     <div id="answer"></div>
   </div>
 
   <div id="papersCard" class="card" style="display:none;">
-    <h2>📚 Research Papers</h2>
+    <h2>Research Papers</h2>
     <ul id="papers"></ul>
   </div>
 
@@ -149,27 +153,31 @@
 
 <script>
 async function search() {
-  const query = document.getElementById("query").value;
+  const query = document.getElementById("query").value.trim();
   const btn = document.getElementById("btn");
 
   const loading = document.getElementById("loading");
   const answerCard = document.getElementById("answerCard");
   const papersCard = document.getElementById("papersCard");
 
+  if (!query) {
+    alert("Please enter a query");
+    return;
+  }
+
   btn.disabled = true;
+  loading.innerText = "AI is analyzing research... (3–8 sec)";
   loading.style.display = "block";
   answerCard.style.display = "none";
   papersCard.style.display = "none";
 
   try {
-    const res = await fetch(`http://localhost:5000/search/all?q=${query}`);
+    const res = await fetch(`https://curalink-backend-h2rw.onrender.com/search/all?q=${encodeURIComponent(query)}`);
     const data = await res.json();
 
-    // Format answer nicely
     document.getElementById("answer").innerHTML =
       data.answer.replace(/\n/g, "<br>");
 
-    // Papers list
     const papersList = document.getElementById("papers");
     papersList.innerHTML = "";
 
@@ -188,7 +196,7 @@ async function search() {
     btn.disabled = false;
 
   } catch (error) {
-    loading.innerText = "❌ Error fetching data";
+    loading.innerText = "Error fetching data. Please try again.";
     btn.disabled = false;
   }
 }
