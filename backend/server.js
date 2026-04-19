@@ -11,42 +11,41 @@ app.use(express.json());
 
 // ---------- ROOT ----------
 app.get("/", (req, res) => {
-  res.send("Server running");
+  res.send("Curalink Backend Running");
 });
 
-// ---------- MAIN API ----------
+// ---------- MAIN ----------
 app.get("/search/all", async (req, res) => {
   try {
     const query = req.query.q;
-
     if (!query) {
-      return res.json({ answer: "No query provided", papers: [] });
+      return res.json({ answer: "No query provided", papers: [], trials: [] });
     }
 
     let papers = [];
+    let trials = [];
 
-    // ---------- OPENALEX ----------
+    // ---------- OPENALEX (DEEP FETCH) ----------
     try {
       const openalexRes = await axios.get(
-        `https://api.openalex.org/works?search=${query}&per-page=10`
+        `https://api.openalex.org/works?search=${query}&per-page=50&sort=publication_date:desc`
       );
 
-      const openalexData = openalexRes.data.results.map(item => ({
-        title: item.display_name,
-        year: item.publication_year || "N/A",
+      papers = openalexRes.data.results.map(p => ({
+        title: p.display_name,
+        year: p.publication_year || "N/A",
         source: "OpenAlex",
-        url: item.id
+        url: p.id
       }));
 
-      papers = [...papers, ...openalexData];
     } catch (e) {
-      console.log("OpenAlex ERROR:", e.message);
+      console.log("OpenAlex error");
     }
 
     // ---------- PUBMED ----------
     try {
       const searchRes = await axios.get(
-        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=5&retmode=json`
+        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=20&sort=pub+date&retmode=json`
       );
 
       const ids = searchRes.data?.esearchresult?.idlist || [];
@@ -62,46 +61,61 @@ app.get("/search/all", async (req, res) => {
         const articles = parsed?.PubmedArticleSet?.PubmedArticle || [];
 
         const pubmed = articles.map(a => {
-          const article = a.MedlineCitation[0].Article[0];
+          const art = a.MedlineCitation[0].Article[0];
           return {
-            title: article.ArticleTitle[0],
+            title: art.ArticleTitle[0],
             year:
-              article.Journal?.[0]?.JournalIssue?.[0]?.PubDate?.[0]?.Year?.[0] ||
-              "N/A",
+              art.Journal?.[0]?.JournalIssue?.[0]?.PubDate?.[0]?.Year?.[0] || "N/A",
             source: "PubMed"
           };
         });
 
         papers = [...papers, ...pubmed];
       }
+
     } catch (e) {
-      console.log("PubMed ERROR:", e.message);
+      console.log("PubMed error");
     }
 
-    if (papers.length === 0) {
-      return res.json({
-        answer: "No research found",
-        papers: []
-      });
+    // ---------- CLINICAL TRIALS ----------
+    try {
+      const ctRes = await axios.get(
+        `https://clinicaltrials.gov/api/v2/studies?query.cond=${query}&pageSize=20&format=json`
+      );
+
+      trials = ctRes.data.studies.map(t => ({
+        title: t.protocolSection.identificationModule.briefTitle,
+        status: t.protocolSection.statusModule.overallStatus,
+        location:
+          t.protocolSection.contactsLocationsModule?.locations?.[0]?.facility?.city || "N/A"
+      }));
+
+    } catch (e) {
+      console.log("Clinical Trials error");
     }
 
-    // ---------- LIMIT ----------
+    // ---------- RANK + FILTER ----------
+    papers = papers
+      .filter(p => p.title.toLowerCase().includes(query.toLowerCase()))
+      .sort((a, b) => (b.year || 0) - (a.year || 0));
+
     const topPapers = papers.slice(0, 6);
+    const topTrials = trials.slice(0, 4);
 
-    // ---------- AI (Hybrid System) ----------
+    // ---------- AI / FALLBACK ----------
     let aiAnswer = "";
-    const HF_API_KEY = process.env.HF_API_KEY;
 
     try {
+      const HF_API_KEY = process.env.HF_API_KEY;
+
       const response = await axios.post(
         "https://router.huggingface.co/hf-inference/models/google/flan-t5-base",
         {
-          inputs: `Summarize medical research about ${query}:\n${topPapers.map(p => p.title).join("\n")}`
+          inputs: `Summarize research on ${query}:\n${topPapers.map(p => p.title).join("\n")}`
         },
         {
           headers: {
-            Authorization: `Bearer ${HF_API_KEY}`,
-            "Content-Type": "application/json"
+            Authorization: `Bearer ${HF_API_KEY}`
           },
           timeout: 15000
         }
@@ -109,40 +123,36 @@ app.get("/search/all", async (req, res) => {
 
       aiAnswer = response.data?.[0]?.generated_text;
 
-      // If empty → fallback
-      if (!aiAnswer) throw new Error("Empty AI response");
+      if (!aiAnswer) throw new Error();
 
-    } catch (e) {
-      console.log("HF FAILED → Using fallback");
-
+    } catch {
       // ---------- SMART FALLBACK ----------
       aiAnswer = `
 Condition Overview:
-Research on "${query}" focuses on diagnosis, treatment, and patient outcomes.
+${query} research focuses on diagnosis, treatment, and outcomes.
 
-Key Research Insights:
-${topPapers.slice(0, 3).map(p => `- ${p.title}`).join("\n")}
+Research Insights:
+${topPapers.map(p => `- ${p.title}`).join("\n")}
 
-Clinical Relevance:
-Studies highlight improvements in early detection, therapy methods, and survival rates.
+Clinical Trials:
+${topTrials.map(t => `- ${t.title} (${t.status})`).join("\n")}
 
 Summary:
-Current research on ${query} shows steady medical advancements with ongoing studies improving treatment strategies.
+There are ongoing advancements in ${query}, with both clinical studies and research papers contributing to improved treatments.
 `;
     }
 
     res.json({
       answer: aiAnswer,
-      papers: topPapers
+      papers: topPapers,
+      trials: topTrials
     });
 
-  } catch (error) {
-    console.error("SERVER ERROR:", error);
-    res.status(500).json({ error: "Backend failed" });
+  } catch (err) {
+    res.status(500).json({ error: "Server failed" });
   }
 });
 
-// ---------- SERVER ----------
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server running on ${PORT}`);
 });
