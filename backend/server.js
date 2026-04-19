@@ -14,12 +14,12 @@ app.get("/", (req, res) => {
   res.send("Server running");
 });
 
-// ---------- DEBUG KEY ----------
+// ---------- CHECK HF KEY ----------
 app.get("/check-key", (req, res) => {
-  if (process.env.OPENAI_API_KEY) {
-    res.send("OPENAI KEY LOADED");
+  if (process.env.HF_API_KEY) {
+    res.send("HF KEY LOADED");
   } else {
-    res.send("NO OPENAI KEY FOUND");
+    res.send("NO HF KEY FOUND");
   }
 });
 
@@ -37,15 +37,17 @@ app.get("/search/all", async (req, res) => {
     // ---------- OPENALEX ----------
     try {
       const openalexRes = await axios.get(
-        `https://api.openalex.org/works?search=${query}&per-page=5`
+        `https://api.openalex.org/works?search=${query}&per-page=10`
       );
 
-      papers = openalexRes.data.results.map(item => ({
+      const openalexData = openalexRes.data.results.map(item => ({
         title: item.display_name,
         year: item.publication_year || "N/A",
         source: "OpenAlex",
         url: item.id
-      })).slice(0, 3);
+      }));
+
+      papers = [...papers, ...openalexData];
 
     } catch (e) {
       console.log("OpenAlex ERROR:", e.message);
@@ -54,7 +56,7 @@ app.get("/search/all", async (req, res) => {
     // ---------- PUBMED ----------
     try {
       const searchRes = await axios.get(
-        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=3&retmode=json`
+        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=5&retmode=json`
       );
 
       const ids = searchRes.data?.esearchresult?.idlist || [];
@@ -94,51 +96,61 @@ app.get("/search/all", async (req, res) => {
       });
     }
 
-    // ---------- OPENAI ----------
+    // ---------- LIMIT FINAL PAPERS ----------
+    const topPapers = papers.slice(0, 6);
+
+    // ---------- HUGGINGFACE AI ----------
     let aiAnswer = "Summary not available.";
+    const HF_API_KEY = process.env.HF_API_KEY;
 
-    const OPENAI_KEY = process.env.OPENAI_API_KEY;
-
-    if (!OPENAI_KEY) {
-      console.log("❌ OPENAI KEY MISSING");
+    if (!HF_API_KEY) {
+      console.log("❌ HF KEY MISSING");
       aiAnswer = "AI not configured. Showing research results.";
     } else {
       try {
+        const prompt = `
+You are a medical research assistant.
+
+User Query: ${query}
+
+Research Papers:
+${topPapers.map(p => `- ${p.title}`).join("\n")}
+
+Provide structured output:
+1. Condition Overview
+2. Key Research Insights
+3. Clinical Relevance
+4. Summary
+`;
+
         const response = await axios.post(
-          "https://api.openai.com/v1/chat/completions",
+          "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
           {
-            model: "gpt-4o-mini", // ✅ better + cheaper
-            messages: [
-              {
-                role: "user",
-                content: `Explain briefly about ${query} using these papers:\n${papers.map(p => p.title).join("\n")}\n\nGive:\n1. Overview\n2. Key Points\n3. Summary`
-              }
-            ],
-            max_tokens: 200
+            inputs: prompt
           },
           {
             headers: {
-              Authorization: `Bearer ${OPENAI_KEY}`,
+              Authorization: `Bearer ${HF_API_KEY}`,
               "Content-Type": "application/json"
             },
-            timeout: 15000
+            timeout: 20000
           }
         );
 
-        aiAnswer = response.data.choices[0].message.content;
+        aiAnswer =
+          response.data?.[0]?.generated_text ||
+          "AI response could not be generated.";
 
       } catch (e) {
-        console.log("❌ OpenAI ERROR FULL:", {
-          message: e.message,
-          status: e.response?.status,
-          data: e.response?.data
-        });
-
-        aiAnswer = `Fallback: Research papers available but AI response failed.`;
+        console.log("❌ HF ERROR:", e.response?.data || e.message);
+        aiAnswer = "Fallback: AI failed but research data is available.";
       }
     }
 
-    res.json({ answer: aiAnswer, papers });
+    res.json({
+      answer: aiAnswer,
+      papers: topPapers
+    });
 
   } catch (error) {
     console.error("❌ SERVER ERROR:", error);
