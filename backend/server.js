@@ -4,7 +4,7 @@ const xml2js = require("xml2js");
 const cors = require("cors");
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
@@ -14,104 +14,119 @@ app.get("/", (req, res) => {
   res.send("Server running");
 });
 
-// ===================== COMBINED + LLM =====================
+// ===================== SEARCH =====================
 app.get("/search/all", async (req, res) => {
   try {
     const query = req.query.q;
 
-    // ---------- OPENALEX (REDUCED LOAD) ----------
-    const openalexRes = await axios.get(
-      `https://api.openalex.org/works?search=${query}&per-page=10`
-    );
+    if (!query) {
+      return res.json({
+        answer: "No query provided",
+        papers: []
+      });
+    }
 
-    const openalexTop = openalexRes.data.results
-      .map(item => ({
-        title: item.display_name,
-        year: item.publication_year,
-        source: "OpenAlex",
-        url: item.id
-      }))
-      .sort((a, b) => b.year - a.year)
-      .slice(0, 2); // reduced
-
-    // ---------- PUBMED ----------
-    const searchResponse = await axios.get(
-      `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=3&retmode=json`
-    );
-
-    const ids = searchResponse.data.esearchresult.idlist;
-
+    let openalexTop = [];
     let pubmedFormatted = [];
 
-    if (ids && ids.length > 0) {
-
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const fetchResponse = await axios.get(
-        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${ids.join(",")}&retmode=xml`
+    // ---------- OPENALEX ----------
+    try {
+      const openalexRes = await axios.get(
+        `https://api.openalex.org/works?search=${query}&per-page=5`
       );
 
-      const parser = new xml2js.Parser();
-      const parsed = await parser.parseStringPromise(fetchResponse.data);
+      openalexTop = openalexRes.data.results
+        .map(item => ({
+          title: item.display_name || "No title",
+          year: item.publication_year || "N/A",
+          source: "OpenAlex",
+          url: item.id || ""
+        }))
+        .sort((a, b) => (b.year || 0) - (a.year || 0))
+        .slice(0, 3);
 
-      const articles = parsed?.PubmedArticleSet?.PubmedArticle || [];
+    } catch (err) {
+      console.log("OpenAlex failed:", err.message);
+    }
 
-      pubmedFormatted = articles.map(article => {
-        const articleData = article.MedlineCitation[0].Article[0];
+    // ---------- PUBMED ----------
+    try {
+      const searchResponse = await axios.get(
+        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=3&retmode=json`
+      );
 
-        return {
-          title: articleData.ArticleTitle[0],
-          year: articleData.Journal[0].JournalIssue[0].PubDate[0].Year
-            ? articleData.Journal[0].JournalIssue[0].PubDate[0].Year[0]
-            : "N/A",
-          source: "PubMed"
-        };
-      }).slice(0, 2); // reduced
+      const ids = searchResponse.data?.esearchresult?.idlist || [];
+
+      if (ids.length > 0) {
+
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        const fetchResponse = await axios.get(
+          `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${ids.join(",")}&retmode=xml`
+        );
+
+        const parser = new xml2js.Parser();
+        const parsed = await parser.parseStringPromise(fetchResponse.data);
+
+        const articles = parsed?.PubmedArticleSet?.PubmedArticle || [];
+
+        pubmedFormatted = articles.map(article => {
+          try {
+            const articleData = article.MedlineCitation[0].Article[0];
+
+            return {
+              title: articleData.ArticleTitle?.[0] || "No title",
+              year:
+                articleData.Journal?.[0]?.JournalIssue?.[0]?.PubDate?.[0]?.Year?.[0] ||
+                "N/A",
+              source: "PubMed"
+            };
+          } catch {
+            return null;
+          }
+        }).filter(Boolean).slice(0, 3);
+      }
+
+    } catch (err) {
+      console.log("PubMed failed:", err.message);
     }
 
     // ---------- COMBINE ----------
     const combined = [...openalexTop, ...pubmedFormatted];
 
-    const filtered = combined.filter(p =>
-      p.title.toLowerCase().includes(query.toLowerCase())
-    );
+    if (combined.length === 0) {
+      return res.json({
+        answer: "No research data found for this query.",
+        papers: []
+      });
+    }
 
-    const finalPapers = filtered.length > 0 ? filtered : combined;
+    // ---------- SIMPLE AI SUMMARY (NO LLM) ----------
+    const titles = combined.map(p => p.title).slice(0, 5);
 
-    // ---------- FAST LLM PROMPT ----------
-    const llmPrompt = `
-Explain briefly.
+    const aiAnswer = `
+Overview:
+Research on "${query}" focuses on recent medical findings and treatment approaches.
 
-Query: ${query}
+Key Points:
+- ${titles.join("\n- ")}
 
-Papers:
-${finalPapers.map(p => `- ${p.title}`).join("\n")}
-
-Give:
-1. Overview
-2. Key points
-3. Summary
+Summary:
+These papers highlight current trends and advancements related to "${query}".
 `;
-
-    const llmResponse = await axios.post(
-      "http://localhost:11434/api/generate",
-      {
-        model: "mistral", // ✅ CHANGED MODEL
-        prompt: llmPrompt,
-        stream: false
-      }
-    );
-
-    const aiAnswer = llmResponse.data.response;
 
     res.json({
       answer: aiAnswer,
-      papers: finalPapers
+      papers: combined
     });
 
   } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: "Combined API error" });
+    console.error("Backend error:", error.message);
+
+    res.status(500).json({
+      error: "Backend failed",
+      details: error.message
+    });
   }
 });
 
