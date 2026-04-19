@@ -4,49 +4,60 @@ const xml2js = require("xml2js");
 const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(express.json());
 
-// ---------- ROOT ----------
+// -------- MEMORY (multi-turn) --------
+const userMemory = {};
+
+// -------- ROOT --------
 app.get("/", (req, res) => {
   res.send("Curalink Backend Running");
 });
 
-// ---------- MAIN ----------
+// -------- MAIN API --------
 app.get("/search/all", async (req, res) => {
   try {
     const query = req.query.q;
+    const userId = req.query.user || "default";
 
     if (!query) {
       return res.json({ answer: "No query provided", papers: [], trials: [] });
     }
 
+    // -------- CONTEXT --------
+    const prevContext = userMemory[userId] || "";
+    const finalQuery = prevContext
+      ? `${prevContext} AND ${query}`
+      : query;
+
+    userMemory[userId] = finalQuery;
+
     let papers = [];
     let trials = [];
 
-    // ---------- OPENALEX ----------
+    // -------- OPENALEX --------
     try {
       const openalexRes = await axios.get(
-        `https://api.openalex.org/works?search=${query}&per-page=50`
+        `https://api.openalex.org/works?search=${finalQuery}&per-page=30&sort=publication_date:desc`
       );
 
-      papers = (openalexRes.data.results || []).map(p => ({
-        title: p.display_name || "No title",
+      papers = openalexRes.data.results.map(p => ({
+        title: p.display_name,
         year: p.publication_year || "N/A",
         source: "OpenAlex",
         url: p.id
       }));
-
     } catch (e) {
       console.log("OpenAlex error:", e.message);
     }
 
-    // ---------- PUBMED ----------
+    // -------- PUBMED --------
     try {
       const searchRes = await axios.get(
-        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=20&retmode=json`
+        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${finalQuery}&retmax=15&retmode=json`
       );
 
       const ids = searchRes.data?.esearchresult?.idlist || [];
@@ -62,105 +73,93 @@ app.get("/search/all", async (req, res) => {
         const articles = parsed?.PubmedArticleSet?.PubmedArticle || [];
 
         const pubmed = articles.map(a => {
-          try {
-            const art = a?.MedlineCitation?.[0]?.Article?.[0];
-
-            return {
-              title: art?.ArticleTitle?.[0] || "No title",
-              year:
-                art?.Journal?.[0]?.JournalIssue?.[0]?.PubDate?.[0]?.Year?.[0] || "N/A",
-              source: "PubMed"
-            };
-          } catch {
-            return null;
-          }
-        }).filter(Boolean);
+          const art = a.MedlineCitation[0].Article[0];
+          return {
+            title: art.ArticleTitle[0],
+            year:
+              art.Journal?.[0]?.JournalIssue?.[0]?.PubDate?.[0]?.Year?.[0] ||
+              "N/A",
+            source: "PubMed"
+          };
+        });
 
         papers = [...papers, ...pubmed];
       }
-
     } catch (e) {
       console.log("PubMed error:", e.message);
     }
 
-    // ---------- CLINICAL TRIALS ----------
+    // -------- CLINICAL TRIALS --------
     try {
       const ctRes = await axios.get(
-        `https://clinicaltrials.gov/api/v2/studies?query.cond=${query}&pageSize=20&format=json`
+        `https://clinicaltrials.gov/api/v2/studies?query.cond=${finalQuery}&pageSize=10&format=json`
       );
 
-      trials = (ctRes.data.studies || []).map(t => ({
-        title: t?.protocolSection?.identificationModule?.briefTitle || "No title",
-        status: t?.protocolSection?.statusModule?.overallStatus || "Unknown",
+      trials = ctRes.data.studies.map(t => ({
+        title: t.protocolSection.identificationModule.briefTitle,
+        status: t.protocolSection.statusModule.overallStatus,
         location:
-          t?.protocolSection?.contactsLocationsModule?.locations?.[0]?.facility?.city || "N/A"
+          t.protocolSection.contactsLocationsModule?.locations?.[0]?.facility
+            ?.city || "N/A"
       }));
-
     } catch (e) {
-      console.log("Clinical Trials error:", e.message);
+      console.log("Trials error:", e.message);
     }
 
-    // ---------- RANK ----------
+    // -------- RANKING --------
     papers = papers
-      .filter(p => p.title.toLowerCase().includes(query.toLowerCase()))
-      .sort((a, b) => (b.year || 0) - (a.year || 0));
+      .map(p => {
+        let score = 0;
+
+        if (p.title.toLowerCase().includes(query.toLowerCase())) score += 2;
+        if (p.year !== "N/A") score += parseInt(p.year) / 1000;
+
+        return { ...p, score };
+      })
+      .sort((a, b) => b.score - a.score);
 
     const topPapers = papers.slice(0, 6);
     const topTrials = trials.slice(0, 4);
 
-    // ---------- HUGGINGFACE ----------
-    let aiAnswer = "";
-
-    try {
-      const HF_API_KEY = process.env.HF_API_KEY;
-
-      if (!HF_API_KEY) throw new Error("No HF key");
-
-      const response = await axios.post(
-        "https://api-inference.huggingface.co/models/google/flan-t5-base",
-        {
-          inputs: `Summarize research about ${query}:\n${topPapers.map(p => p.title).join("\n")}`
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${HF_API_KEY}`,
-            "Content-Type": "application/json"
-          },
-          timeout: 15000,
-          validateStatus: () => true // prevents crash
-        }
-      );
-
-      // ---------- SAFE PARSING ----------
-      if (typeof response.data === "string") {
-        throw new Error("HF returned HTML");
-      }
-
-      if (response.data?.error) {
-        throw new Error(response.data.error);
-      }
-
-      aiAnswer = response.data?.[0]?.generated_text;
-
-      if (!aiAnswer) throw new Error("Empty response");
-
-    } catch (e) {
-      console.log("HF FAILED:", e.message);
-
-      // ---------- FALLBACK ----------
-      aiAnswer = `
+    // -------- AI (SAFE FALLBACK) --------
+    let aiAnswer = `
 Condition Overview:
 ${query} research focuses on diagnosis, treatment, and outcomes.
 
-Key Research Insights:
+Research Insights:
 ${topPapers.map(p => `- ${p.title}`).join("\n")}
 
 Clinical Trials:
 ${topTrials.map(t => `- ${t.title} (${t.status})`).join("\n")}
 
 Summary:
-Ongoing research and clinical trials are improving treatment strategies for ${query}.
+Ongoing studies and trials are improving understanding and treatment strategies.
 `;
+
+    // -------- HUGGINGFACE (OPTIONAL) --------
+    try {
+      const HF_API_KEY = process.env.HF_API_KEY;
+
+      if (HF_API_KEY) {
+        const response = await axios.post(
+          "https://api-inference.huggingface.co/models/google/flan-t5-base",
+          {
+            inputs: `Summarize research on ${query}:\n${topPapers.map(p => p.title).join("\n")}`
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${HF_API_KEY}`
+            },
+            timeout: 15000
+          }
+        );
+
+        if (response.data?.[0]?.generated_text) {
+          aiAnswer = response.data[0].generated_text;
+        }
+      }
+    } catch (e) {
+      console.log("HF failed, fallback used");
     }
 
     res.json({
@@ -175,7 +174,6 @@ Ongoing research and clinical trials are improving treatment strategies for ${qu
   }
 });
 
-// ---------- SERVER ----------
 app.listen(PORT, () => {
   console.log(`Server running on ${PORT}`);
 });
