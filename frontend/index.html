@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Medical Research AI</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Arial;
+      background: linear-gradient(to right, #eef2f7, #f8fbff);
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+      padding: 40px 20px;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 42px;
+      margin-bottom: 10px;
+    }
+
+    .gradient {
+      background: linear-gradient(90deg, #6a11cb, #2575fc);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #666;
+      margin-bottom: 30px;
+    }
+
+    .search-box {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    input {
+      flex: 1;
+      padding: 14px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: #2575fc;
+      box-shadow: 0 0 5px rgba(37,117,252,0.3);
+    }
+
+    button {
+      padding: 14px 25px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(90deg, #6a11cb, #2575fc);
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    button:disabled {
+      background: gray;
+      cursor: not-allowed;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      margin-top: 20px;
+      border-radius: 12px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+
+    .loading {
+      text-align: center;
+      font-size: 18px;
+      color: #555;
+      margin-top: 20px;
+    }
+
+    ul {
+      padding-left: 20px;
+    }
+
+    li {
+      margin-bottom: 10px;
+    }
+
+    a {
+      color: #2575fc;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      color: #999;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>Medical <span class="gradient">Research AI</span></h1>
+  <p class="subtitle">Get insights from real research papers instantly</p>
+
+  <div class="search-box">
+    <input type="text" id="query" placeholder="Search disease (e.g. lung cancer)" />
+    <button id="btn" onclick="search()">Search</button>
+  </div>
+
+  <div id="loading" class="loading" style="display:none;">
+    ⏳ AI is analyzing research... (3–8 sec)
+  </div>
+
+  <div id="answerCard" class="card" style="display:none;">
+    <h2>🧠 AI Insights</h2>
+    <div id="answer"></div>
+  </div>
+
+  <div id="papersCard" class="card" style="display:none;">
+    <h2>📚 Research Papers</h2>
+    <ul id="papers"></ul>
+  </div>
+
+  <div class="footer">
+    Built with OpenAlex + PubMed + AI
+  </div>
+
+</div>
+
+<script>
+async function search() {
+  const query = document.getElementById("query").value;
+  const btn = document.getElementById("btn");
+
+  const loading = document.getElementById("loading");
+  const answerCard = document.getElementById("answerCard");
+  const papersCard = document.getElementById("papersCard");
+
+  btn.disabled = true;
+  loading.style.display = "block";
+  answerCard.style.display = "none";
+  papersCard.style.display = "none";
+
+  try {
+    const res = await fetch(`http://localhost:5000/search/all?q=${query}`);
+    const data = await res.json();
+
+    // Format answer nicely
+    document.getElementById("answer").innerHTML =
+      data.answer.replace(/\n/g, "<br>");
+
+    // Papers list
+    const papersList = document.getElementById("papers");
+    papersList.innerHTML = "";
+
+    data.papers.forEach(p => {
+      const li = document.createElement("li");
+      li.innerHTML = `
+        <b>${p.title}</b> (${p.year}) - ${p.source}
+        ${p.url ? `<br><a href="${p.url}" target="_blank">View Paper</a>` : ""}
+      `;
+      papersList.appendChild(li);
+    });
+
+    loading.style.display = "none";
+    answerCard.style.display = "block";
+    papersCard.style.display = "block";
+    btn.disabled = false;
+
+  } catch (error) {
+    loading.innerText = "❌ Error fetching data";
+    btn.disabled = false;
+  }
+}
+</script>
+
+</body>
+</html>
