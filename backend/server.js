@@ -9,25 +9,18 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// ===================== ROOT =====================
 app.get("/", (req, res) => {
   res.send("Server running");
 });
 
-// ===================== SEARCH =====================
 app.get("/search/all", async (req, res) => {
   try {
     const query = req.query.q;
-
     if (!query) {
-      return res.json({
-        answer: "No query provided",
-        papers: []
-      });
+      return res.json({ answer: "No query provided", papers: [] });
     }
 
-    let openalexTop = [];
-    let pubmedFormatted = [];
+    let papers = [];
 
     // ---------- OPENALEX ----------
     try {
@@ -35,102 +28,98 @@ app.get("/search/all", async (req, res) => {
         `https://api.openalex.org/works?search=${query}&per-page=5`
       );
 
-      openalexTop = openalexRes.data.results
-        .map(item => ({
-          title: item.display_name || "No title",
-          year: item.publication_year || "N/A",
-          source: "OpenAlex",
-          url: item.id || ""
-        }))
-        .sort((a, b) => (b.year || 0) - (a.year || 0))
-        .slice(0, 3);
-
-    } catch (err) {
-      console.log("OpenAlex failed:", err.message);
+      papers = openalexRes.data.results.map(item => ({
+        title: item.display_name,
+        year: item.publication_year || "N/A",
+        source: "OpenAlex",
+        url: item.id
+      })).slice(0, 3);
+    } catch (e) {
+      console.log("OpenAlex error");
     }
 
     // ---------- PUBMED ----------
     try {
-      const searchResponse = await axios.get(
+      const searchRes = await axios.get(
         `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${query}&retmax=3&retmode=json`
       );
 
-      const ids = searchResponse.data?.esearchresult?.idlist || [];
+      const ids = searchRes.data?.esearchresult?.idlist || [];
 
       if (ids.length > 0) {
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        const fetchResponse = await axios.get(
+        const fetchRes = await axios.get(
           `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&id=${ids.join(",")}&retmode=xml`
         );
 
         const parser = new xml2js.Parser();
-        const parsed = await parser.parseStringPromise(fetchResponse.data);
+        const parsed = await parser.parseStringPromise(fetchRes.data);
 
         const articles = parsed?.PubmedArticleSet?.PubmedArticle || [];
 
-        pubmedFormatted = articles.map(article => {
-          try {
-            const articleData = article.MedlineCitation[0].Article[0];
+        const pubmed = articles.map(a => {
+          const article = a.MedlineCitation[0].Article[0];
+          return {
+            title: article.ArticleTitle[0],
+            year:
+              article.Journal?.[0]?.JournalIssue?.[0]?.PubDate?.[0]?.Year?.[0] ||
+              "N/A",
+            source: "PubMed"
+          };
+        });
 
-            return {
-              title: articleData.ArticleTitle?.[0] || "No title",
-              year:
-                articleData.Journal?.[0]?.JournalIssue?.[0]?.PubDate?.[0]?.Year?.[0] ||
-                "N/A",
-              source: "PubMed"
-            };
-          } catch {
-            return null;
-          }
-        }).filter(Boolean).slice(0, 3);
+        papers = [...papers, ...pubmed];
       }
-
-    } catch (err) {
-      console.log("PubMed failed:", err.message);
+    } catch (e) {
+      console.log("PubMed error");
     }
 
-    // ---------- COMBINE ----------
-    const combined = [...openalexTop, ...pubmedFormatted];
-
-    if (combined.length === 0) {
+    if (papers.length === 0) {
       return res.json({
-        answer: "No research data found for this query.",
+        answer: "No research found",
         papers: []
       });
     }
 
-    // ---------- SIMPLE AI SUMMARY (NO LLM) ----------
-    const titles = combined.map(p => p.title).slice(0, 5);
+    // ---------- REAL AI (OPENAI) ----------
+    const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
-    const aiAnswer = `
-Overview:
-Research on "${query}" focuses on recent medical findings and treatment approaches.
+    let aiAnswer = "Summary not available.";
 
-Key Points:
-- ${titles.join("\n- ")}
+    try {
+      const response = await axios.post(
+        "https://api.openai.com/v1/chat/completions",
+        {
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "user",
+              content: `Explain briefly about ${query} using these papers:\n${papers.map(p => p.title).join("\n")}`
+            }
+          ],
+          max_tokens: 200
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${OPENAI_KEY}`,
+            "Content-Type": "application/json"
+          }
+        }
+      );
 
-Summary:
-These papers highlight current trends and advancements related to "${query}".
-`;
+      aiAnswer = response.data.choices[0].message.content;
+    } catch (e) {
+      console.log("OpenAI failed, using fallback");
+      aiAnswer = `Research papers related to "${query}" show recent developments in treatment and diagnosis.`;
+    }
 
-    res.json({
-      answer: aiAnswer,
-      papers: combined
-    });
+    res.json({ answer: aiAnswer, papers });
 
   } catch (error) {
-    console.error("Backend error:", error.message);
-
-    res.status(500).json({
-      error: "Backend failed",
-      details: error.message
-    });
+    console.error(error);
+    res.status(500).json({ error: "Backend failed" });
   }
 });
 
-// ===================== SERVER =====================
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
