@@ -9,7 +9,7 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json());
 
-// -------- MEMORY (multi-turn) --------
+// -------- MEMORY --------
 const userMemory = {};
 
 // -------- ROOT --------
@@ -20,7 +20,7 @@ app.get("/", (req, res) => {
 // -------- MAIN API --------
 app.get("/search/all", async (req, res) => {
   try {
-    const query = req.query.q;
+    const query = req.query.q || "";
     const userId = req.query.user || "default";
 
     if (!query) {
@@ -29,10 +29,7 @@ app.get("/search/all", async (req, res) => {
 
     // -------- CONTEXT --------
     const prevContext = userMemory[userId] || "";
-    const finalQuery = prevContext
-      ? `${prevContext} AND ${query}`
-      : query;
-
+    const finalQuery = prevContext ? `${prevContext} AND ${query}` : query;
     userMemory[userId] = finalQuery;
 
     let papers = [];
@@ -41,14 +38,14 @@ app.get("/search/all", async (req, res) => {
     // -------- OPENALEX --------
     try {
       const openalexRes = await axios.get(
-        `https://api.openalex.org/works?search=${finalQuery}&per-page=30&sort=publication_date:desc`
+        `https://api.openalex.org/works?search=${encodeURIComponent(finalQuery)}&per-page=30&sort=publication_date:desc`
       );
 
       papers = openalexRes.data.results.map(p => ({
-        title: p.display_name,
+        title: p.display_name || "No title",
         year: p.publication_year || "N/A",
         source: "OpenAlex",
-        url: p.id
+        url: p.id || "#"
       }));
     } catch (e) {
       console.log("OpenAlex error:", e.message);
@@ -57,7 +54,7 @@ app.get("/search/all", async (req, res) => {
     // -------- PUBMED --------
     try {
       const searchRes = await axios.get(
-        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${finalQuery}&retmax=15&retmode=json`
+        `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${encodeURIComponent(finalQuery)}&retmax=15&retmode=json`
       );
 
       const ids = searchRes.data?.esearchresult?.idlist || [];
@@ -73,11 +70,11 @@ app.get("/search/all", async (req, res) => {
         const articles = parsed?.PubmedArticleSet?.PubmedArticle || [];
 
         const pubmed = articles.map(a => {
-          const art = a.MedlineCitation[0].Article[0];
+          const art = a?.MedlineCitation?.[0]?.Article?.[0] || {};
           return {
-            title: art.ArticleTitle[0],
+            title: art?.ArticleTitle?.[0] || "No title",
             year:
-              art.Journal?.[0]?.JournalIssue?.[0]?.PubDate?.[0]?.Year?.[0] ||
+              art?.Journal?.[0]?.JournalIssue?.[0]?.PubDate?.[0]?.Year?.[0] ||
               "N/A",
             source: "PubMed"
           };
@@ -92,27 +89,34 @@ app.get("/search/all", async (req, res) => {
     // -------- CLINICAL TRIALS --------
     try {
       const ctRes = await axios.get(
-        `https://clinicaltrials.gov/api/v2/studies?query.cond=${finalQuery}&pageSize=10&format=json`
+        `https://clinicaltrials.gov/api/v2/studies?query.cond=${encodeURIComponent(finalQuery)}&pageSize=10&format=json`
       );
 
-      trials = ctRes.data.studies.map(t => ({
-        title: t.protocolSection.identificationModule.briefTitle,
-        status: t.protocolSection.statusModule.overallStatus,
+      trials = (ctRes.data.studies || []).map(t => ({
+        title:
+          t?.protocolSection?.identificationModule?.briefTitle || "No title",
+        status:
+          t?.protocolSection?.statusModule?.overallStatus || "Unknown",
         location:
-          t.protocolSection.contactsLocationsModule?.locations?.[0]?.facility
+          t?.protocolSection?.contactsLocationsModule?.locations?.[0]?.facility
             ?.city || "N/A"
       }));
     } catch (e) {
       console.log("Trials error:", e.message);
     }
 
-    // -------- RANKING --------
+    // -------- SAFE RANKING --------
     papers = papers
       .map(p => {
+        const title = (p.title || "").toLowerCase();
+        const q = (query || "").toLowerCase();
+
         let score = 0;
 
-        if (p.title.toLowerCase().includes(query.toLowerCase())) score += 2;
-        if (p.year !== "N/A") score += parseInt(p.year) / 1000;
+        if (title.includes(q)) score += 2;
+
+        const yearNum = parseInt(p.year);
+        if (!isNaN(yearNum)) score += yearNum / 1000;
 
         return { ...p, score };
       })
@@ -121,7 +125,7 @@ app.get("/search/all", async (req, res) => {
     const topPapers = papers.slice(0, 6);
     const topTrials = trials.slice(0, 4);
 
-    // -------- AI (SAFE FALLBACK) --------
+    // -------- AI FALLBACK --------
     let aiAnswer = `
 Condition Overview:
 ${query} research focuses on diagnosis, treatment, and outcomes.
@@ -136,7 +140,7 @@ Summary:
 Ongoing studies and trials are improving understanding and treatment strategies.
 `;
 
-    // -------- HUGGINGFACE (OPTIONAL) --------
+    // -------- HUGGINGFACE --------
     try {
       const HF_API_KEY = process.env.HF_API_KEY;
 
@@ -162,6 +166,7 @@ Ongoing studies and trials are improving understanding and treatment strategies.
       console.log("HF failed, fallback used");
     }
 
+    // -------- RESPONSE --------
     res.json({
       answer: aiAnswer,
       papers: topPapers,
